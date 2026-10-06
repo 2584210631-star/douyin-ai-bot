@@ -1,0 +1,12 @@
+# Termux 精简依赖：只保留私信收发 + 登录所需，去掉 curl_cffi/opencv/av/openpyxl/aiofiles
+requests
+beautifulsoup4
+cryptography
+ecdsa
+loguru
+python-dotenv
+qrcode
+websocket-client
+protobuf>=5.27
+blackboxprotobuf
+flask

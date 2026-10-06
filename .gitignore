@@ -1,0 +1,18 @@
+# 凭证与运行时产物：永不入库
+.env
+*.env
+.env.*
+!.env.example
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 系统与编辑器
+.DS_Store
+.idea/
+.vscode/
+
+# 打包产物
+*.zip
