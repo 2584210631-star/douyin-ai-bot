@@ -2,15 +2,16 @@
 
 抖音私信 AI 自动回复机器人（Termux 版，带 Web 控制台）。基于 [cv-cat/DouYin_Spider](https://github.com/cv-cat/DouYin_Spider) 的私信收发能力（WebSocket 收 + protobuf 发 + 纯 Python a_bogus 签名），接入任意 OpenAI 兼容接口（本地 Ollama / 各类中转 API）自动回复。
 
-## 目录结构
+## 目录结构（仓库根目录即项目，已展平）
 
 | 路径 | 说明 |
 |---|---|
-| `DouYin_Spider/` | 上游项目源码（已内置 Termux 回退补丁） |
 | `ai_reply_bot.py` | 机器人主程序（Web 控制台：扫码登录 / 实时看私信 / AI 配置） |
 | `termux_patch.py` | Termux 回退补丁（curl_cffi → 纯 requests） |
 | `termux_install.sh` | Termux 一键安装脚本 |
 | `requirements-termux.txt` | 精简依赖清单 |
+| `builder/` `dy_apis/` `dy_live/` `static/` `utils/` `newsign/` 等 | 上游 DouYin_Spider 源码（已内置 Termux 回退补丁） |
+| `README-upstream.md` | 上游项目原始 README |
 
 ## 快速开始（Termux）
 
