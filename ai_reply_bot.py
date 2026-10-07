@@ -534,7 +534,7 @@ textarea{min-height:70px;resize:vertical}
 #saveBtn{margin-top:16px}
 </style></head><body>
 
-<div id="loginView" style="display:none">
+<div id="loginView">
   <div class="ltabs">
     <button id="ltabQr" class="active" onclick="switchLogin('qr')">扫码登录</button>
     <button id="ltabSms" onclick="switchLogin('sms')">验证码登录</button>
@@ -630,7 +630,10 @@ async function refresh(){
     document.getElementById('status').textContent=s.ai_model+' @ '+s.ai_base_url;
     const d=await (await fetch('/api/messages?after='+after)).json();
     if(d.items.length){after=d.total;render(d.items);}
-  }catch(e){}
+  }catch(e){
+    const el=document.getElementById('loginMsg');
+    if(el){el.textContent='页面加载失败，请用系统浏览器（Chrome/Edge/夸克）打开本页：'+e;}
+  }
 }
 function showTab(t){
   document.getElementById('tabMsg').classList.toggle('active',t==='msg');
@@ -710,7 +713,19 @@ def start_web_server(port):
 
     @app.get("/")
     def index():
-        return PAGE_HTML, 200, {"Content-Type": "text/html; charset=utf-8"}
+        # 服务端直接把二维码渲染进 HTML：即使手机浏览器 JS 受限/禁用，
+        # 打开页面也能看到二维码，不会黑屏；JS 正常时再由 refresh() 覆盖。
+        html = PAGE_HTML
+        if LOGIN_STATE.get("qr_svg"):
+            html = html.replace(
+                '<div id="qrBox"></div>',
+                '<div id="qrBox">%s</div>' % LOGIN_STATE["qr_svg"])
+        if LOGIN_STATE.get("qr_url"):
+            html = html.replace(
+                '<div id="qrUrl" class="hint"></div>',
+                '<div id="qrUrl" class="hint">扫不了？长按复制这行链接，'
+                '粘到抖音 App 里打开试试：\n%s</div>' % LOGIN_STATE["qr_url"])
+        return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
     @app.get("/api/messages")
     def api_messages():
