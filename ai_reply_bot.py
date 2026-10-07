@@ -108,9 +108,12 @@ _ai_pool = ThreadPoolExecutor(max_workers=MAX_AI_WORKERS)
 _my_uid = None
 
 # ---------------- 网页登录状态 ----------------
-LOGIN_STATE = {"status": "idle", "qr_svg": "", "msg": ""}
+LOGIN_STATE = {"status": "idle", "qr_svg": "", "msg": "",
+               "sms_sent": False, "sms_phone": ""}
 LOGIN_EVENT = threading.Event()
 LOGIN_RESULT = {}
+SMS_AUTH = None
+SMS_LOCK = threading.Lock()
 
 
 def append_log(entry):
@@ -163,6 +166,8 @@ def _qr_to_svg(url):
 def start_web_qr_login():
     """后台跑扫码登录；二维码实时推到 Web 页。"""
     def on_qrcode(url):
+        if LOGIN_STATE.get("sms_sent"):
+            return  # 用户已改用验证码登录，别覆盖它的状态
         LOGIN_STATE["qr_svg"] = _qr_to_svg(url)
         LOGIN_STATE["status"] = "new_qr"
         LOGIN_STATE["msg"] = "请用抖音 App 扫一扫（可截图后用抖音扫一扫识别）"
@@ -177,9 +182,10 @@ def start_web_qr_login():
             LOGIN_STATE["msg"] = "登录成功！正在进入…"
             logger.info("网页扫码登录成功")
         except Exception as exc:
-            LOGIN_STATE["status"] = "error"
-            LOGIN_STATE["msg"] = f"登录失败: {exc}"
-            logger.error(f"网页扫码登录失败: {exc}")
+            if not LOGIN_RESULT.get("auth"):  # 验证码已登录成功时不覆盖
+                LOGIN_STATE["status"] = "error"
+                LOGIN_STATE["msg"] = f"登录失败: {exc}"
+                logger.error(f"网页扫码登录失败: {exc}")
         finally:
             LOGIN_EVENT.set()
 
@@ -188,12 +194,15 @@ def start_web_qr_login():
 
 
 def web_qr_login(timeout=360):
-    """阻塞等待 Web 页扫码完成，返回 auth。"""
+    """阻塞等待登录完成（扫码或验证码任一路径），返回 auth。"""
+    if LOGIN_RESULT.get("auth"):
+        return LOGIN_RESULT["auth"]
+    LOGIN_EVENT.clear()
     start_web_qr_login()
     LOGIN_EVENT.wait(timeout)
     auth = LOGIN_RESULT.get("auth")
     if not auth:
-        raise RuntimeError("网页扫码登录失败: " + LOGIN_STATE.get("msg", "超时"))
+        raise RuntimeError("网页登录失败: " + LOGIN_STATE.get("msg", "超时"))
     return auth
 
 
@@ -490,6 +499,12 @@ h2{font-size:15px;color:#c6cdd9;margin:8px 0 6px}
 .hint{color:#8b95a5;font-size:13px;line-height:1.6}
 #qrBox{margin:14px 0;padding:10px;display:inline-block;background:#fff;border-radius:10px}
 #loginMsg{color:#8b95a5;font-size:13px;margin-top:6px}
+.ltabs{display:flex;gap:8px;margin-bottom:12px}
+.ltabs button{flex:1;background:#151922;color:#8b95a5;border:1px solid #333a46;border-radius:8px;padding:8px 0;font-size:14px;cursor:pointer}
+.ltabs button.active{background:#2a8a56;color:#fff;border-color:#2a8a56}
+.row{margin:12px 0}
+.row button{background:#2a8a56;color:#fff;border:none;border-radius:6px;padding:9px 14px;font-size:14px;cursor:pointer}
+#smsMsg{color:#8b95a5;font-size:13px;margin-top:8px}
 #head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
 #uidLine{color:#5b6472;font-size:12px}
 .tabs{display:flex;gap:8px;margin:10px 0}
@@ -518,11 +533,26 @@ textarea{min-height:70px;resize:vertical}
 </style></head><body>
 
 <div id="loginView" style="display:none">
-  <h2>扫码登录抖音</h2>
-  <p class="hint">用抖音 App「扫一扫」扫描下方二维码，在手机上确认登录。<br>
-  若手机上看不到这个页面：把二维码截图，再用抖音扫一扫识别图片。</p>
-  <div id="qrBox"></div>
-  <div id="loginMsg" class="hint">正在获取二维码…</div>
+  <div class="ltabs">
+    <button id="ltabQr" class="active" onclick="switchLogin('qr')">扫码登录</button>
+    <button id="ltabSms" onclick="switchLogin('sms')">验证码登录</button>
+  </div>
+  <div id="qrPane">
+    <h2>扫码登录抖音</h2>
+    <p class="hint">用抖音 App「扫一扫」扫描下方二维码，在手机上确认登录。</p>
+    <div id="qrBox"></div>
+    <div id="loginMsg" class="hint">正在获取二维码…</div>
+  </div>
+  <div id="smsPane" style="display:none">
+    <h2>手机号验证码登录</h2>
+    <label>手机号（大陆 11 位）</label>
+    <input id="smsPhone" placeholder="13800138000">
+    <div class="row"><button onclick="sendSms()">发送验证码</button></div>
+    <label>验证码（6 位）</label>
+    <input id="smsCode" placeholder="输入收到的验证码" inputmode="numeric">
+    <div class="row"><button onclick="submitSms()">登录</button></div>
+    <div id="smsMsg" class="hint"></div>
+  </div>
 </div>
 
 <div id="mainView" style="display:none">
@@ -582,6 +612,7 @@ async function refresh(){
       const st=await (await fetch('/api/login/status')).json();
       if(st.qr_svg){document.getElementById('qrBox').innerHTML=st.qr_svg;}
       document.getElementById('loginMsg').textContent=st.msg||'请扫码';
+      document.getElementById('smsMsg').textContent=st.msg||'';
       if(st.status==='idle'){fetch('/api/login/start',{method:'POST'});}
       return;
     }
@@ -629,6 +660,29 @@ async function saveConfig(){
   document.getElementById('cfgMsg').textContent='已保存 ✓';
   setTimeout(()=>document.getElementById('cfgMsg').textContent='',2500);
   document.getElementById('cfg_ai_api_key').value=res.ai_api_key;
+}
+function switchLogin(t){
+  document.getElementById('ltabQr').classList.toggle('active',t==='qr');
+  document.getElementById('ltabSms').classList.toggle('active',t==='sms');
+  document.getElementById('qrPane').style.display=t==='qr'?'block':'none';
+  document.getElementById('smsPane').style.display=t==='sms'?'block':'none';
+}
+async function sendSms(){
+  const phone=document.getElementById('smsPhone').value.trim();
+  const out=document.getElementById('smsMsg');
+  if(!phone){out.textContent='请输入手机号';return;}
+  const r=await fetch('/api/login/sms/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone})});
+  const res=await r.json();
+  out.textContent=res.msg||'';
+}
+async function submitSms(){
+  const phone=document.getElementById('smsPhone').value.trim();
+  const code=document.getElementById('smsCode').value.trim();
+  const out=document.getElementById('smsMsg');
+  if(!phone||!code){out.textContent='请输入手机号和验证码';return;}
+  const r=await fetch('/api/login/sms/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,code})});
+  const res=await r.json();
+  out.textContent=res.msg||'';
 }
 document.getElementById('toggle').onclick=async function(){
   const now=this.textContent.includes('开');
@@ -694,6 +748,65 @@ def start_web_server(port):
             return jsonify(LOGIN_STATE)
         start_web_qr_login()
         return jsonify(LOGIN_STATE)
+
+    def _sms_worker(phone, code):
+        """发验证码（code=None）或提交验证码登录，结果写回全局状态。"""
+        global SMS_AUTH
+        try:
+            from builder.auth import DouyinAuth
+            from dy_apis.login_api import DYLoginApi
+            if code is None:
+                auth, resp = DouyinAuth.open(
+                    login_type="phone", phone=phone, bootstrap_creator=False)
+                SMS_AUTH = auth
+                LOGIN_STATE.update(status="sms_sent", sms_sent=True,
+                                   sms_phone=phone,
+                                   msg="验证码已发送，请输入 6 位验证码登录")
+                append_log({"dir": "sys", "text": f"验证码已发送至 {phone}"})
+            else:
+                if SMS_AUTH is None:
+                    raise RuntimeError("请先发送验证码，再提交登录")
+                auth = DouyinAuth.open(
+                    login_type="phone", phone=phone, code=code,
+                    auth=SMS_AUTH, bootstrap_creator=False)
+                DYLoginApi().save_credential(auth)
+                LOGIN_RESULT["auth"] = auth
+                LOGIN_STATE.update(status="confirmed", msg="登录成功！正在进入…")
+                append_log({"dir": "sys", "text": "验证码登录成功，凭证已保存"})
+                LOGIN_EVENT.set()
+        except Exception as exc:
+            LOGIN_STATE.update(status="sms_error",
+                               msg=f"验证码登录失败: {exc}")
+            logger.error(f"验证码登录失败: {exc}")
+
+    @app.post("/api/login/sms/send")
+    def api_login_sms_send():
+        if AUTH is not None or LOGIN_RESULT.get("auth"):
+            return jsonify({"ok": False, "msg": "已登录"})
+        data = request.get_json(force=True, silent=True) or {}
+        phone = str(data.get("phone", "")).strip()
+        if not phone:
+            return jsonify({"ok": False, "msg": "请输入手机号"})
+        if LOGIN_STATE["status"] == "sms_sent":
+            return jsonify({"ok": True, "msg": "验证码已发送，请查收"})
+        LOGIN_STATE.update(status="sms_sending", msg="正在发送验证码…")
+        threading.Thread(target=_sms_worker, args=(phone, None),
+                         daemon=True).start()
+        return jsonify({"ok": True, "msg": "正在发送验证码…"})
+
+    @app.post("/api/login/sms/submit")
+    def api_login_sms_submit():
+        if AUTH is not None or LOGIN_RESULT.get("auth"):
+            return jsonify({"ok": False, "msg": "已登录"})
+        data = request.get_json(force=True, silent=True) or {}
+        phone = str(data.get("phone", "")).strip()
+        code = str(data.get("code", "")).strip()
+        if not phone or not code:
+            return jsonify({"ok": False, "msg": "请输入手机号和验证码"})
+        LOGIN_STATE.update(status="sms_submitting", msg="正在登录…")
+        threading.Thread(target=_sms_worker, args=(phone, code),
+                         daemon=True).start()
+        return jsonify({"ok": True, "msg": "正在登录…"})
 
     threading.Thread(
         target=lambda: app.run(host="0.0.0.0", port=port, debug=False,
