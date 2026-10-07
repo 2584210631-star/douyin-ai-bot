@@ -880,6 +880,16 @@ def start_web_server(port):
                     raise RuntimeError(
                         "Cookie 里没有 sessionid（未真正登录成功或复制的不是"
                         "登录态 Cookie），请重新登录 douyin.com 后复制")
+                # cookie 登录没经过 passport bootstrap，需要本地生成 ECDSA 密钥对
+                if not auth.private_key:
+                    from utils.passport import generate_ec_keypair, build_client_data_cookie
+                    auth.private_key, _pub = generate_ec_keypair()
+                    import base64 as _b64
+                    auth.ree_public_key = _b64.b64encode(
+                        auth.private_key.encode()).decode()
+                    auth.cookie["bd_ticket_guard_client_data"] = build_client_data_cookie(auth.private_key)
+                    auth._sync_cookie_str()
+                    append_log({"dir": "sys", "text": "已生成本地 ECDSA 密钥对"})
                 from dy_apis.login_api import DYLoginApi
                 DYLoginApi().save_credential(auth)
                 LOGIN_RESULT["auth"] = auth
