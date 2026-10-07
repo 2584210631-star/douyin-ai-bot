@@ -80,8 +80,12 @@ AI_API_KEY = os.getenv("AI_API_KEY", "ollama")
 AI_MODEL = os.getenv("AI_MODEL", "qwen2.5:3b")
 SYSTEM_PROMPT = os.getenv(
     "AI_SYSTEM_PROMPT",
-    "你是我的抖音私信小助手，用自然、简洁、口语化的中文回复，不要编造事实，"
-    "遇到不确定的事就说需要问本人。",
+    "你是我的抖音私信小助手。规则：\n"
+    "1. 回复要简短口语化，每次不超过100字\n"
+    "2. 不要发代码块、不要发长文、不要用markdown格式\n"
+    "3. 像微信聊天一样自然回复\n"
+    "4. 遇到不确定的事就说需要问本人\n"
+    "5. 不要编造事实",
 )
 WHITELIST = {x.strip() for x in os.getenv("REPLY_WHITELIST", "").split(",") if x.strip()}
 REPLY_COOLDOWN = int(os.getenv("REPLY_COOLDOWN", "20"))
@@ -390,8 +394,8 @@ def reply_to(uid, user_text):
             conv = DouyinAPI.create_conversation(AUTH, uid)
             _conv_cache[uid] = conv
         conversation_id, short_id, ticket = conv
-        # 长回复分段发（抖音单条私信限制严格，按200字一段）
-        MAX_LEN = 200
+        # 长回复兜底分段（正常AI回复已限制在100字内）
+        MAX_LEN = 300
         chunks = [reply[i:i+MAX_LEN] for i in range(0, len(reply), MAX_LEN)] or [reply]
         all_ok = True
         for chunk in chunks:
@@ -399,7 +403,7 @@ def reply_to(uid, user_text):
             if not ok:
                 all_ok = False
                 break
-            time.sleep(2)  # 分段之间间隔2秒，防风控
+            time.sleep(3)
         if all_ok:
             append_log({"dir": "out", "uid": uid, "type": "ai", "text": reply})
             # 记录对话历史
