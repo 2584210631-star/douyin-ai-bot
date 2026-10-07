@@ -434,7 +434,7 @@ def handle_text(notify, content, uid=None):
     text = (content or {}).get("text", "").strip()
     if not text:
         return
-    if uid == my_uid():
+    if str(uid) == str(my_uid()):
         return                                          # 自己发的（WS 会回显）
     if WHITELIST and str(uid) not in WHITELIST:
         append_log({"dir": "sys", "text": f"[{uid}] 不在白名单，跳过"})
