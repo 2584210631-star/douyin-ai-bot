@@ -952,6 +952,19 @@ if __name__ == "__main__":
     else:
         logger.info("已使用 .env 本地登录凭证")
 
+    # cookie 登录/凭证加载后，如果没有 private_key，本地生成 ECDSA 密钥对
+    if AUTH and not AUTH.private_key:
+        try:
+            from utils.passport import generate_ec_keypair, build_client_data_cookie
+            AUTH.private_key, _pub = generate_ec_keypair()
+            import base64 as _b64
+            AUTH.ree_public_key = _b64.b64encode(AUTH.private_key.encode()).decode()
+            AUTH.cookie["bd_ticket_guard_client_data"] = build_client_data_cookie(AUTH.private_key)
+            AUTH._sync_cookie_str()
+            logger.info("已生成本地 ECDSA 密钥对（cookie 登录无 bootstrap）")
+        except Exception as exc:
+            logger.warning(f"ECDSA 密钥对生成失败: {exc}")
+
     logger.info(f"登录成功，我的 uid={my_uid()}，AI: {AI_MODEL} @ {AI_BASE_URL}")
     append_log({"dir": "sys", "text": "机器人已启动，开始监听私信"})
     try:
