@@ -546,7 +546,7 @@ textarea{min-height:70px;resize:vertical}
     <div id="qrUrl" class="hint"></div>
     <div id="loginMsg" class="hint">正在获取二维码…</div>
   </div>
-  <div id="smsPane" style="display:none">
+  <div id="smsPane">
     <h2>手机号验证码登录</h2>
     <label>手机号（大陆 11 位）</label>
     <input id="smsPhone" placeholder="13800138000">
@@ -721,10 +721,11 @@ def start_web_server(port):
                 '<div id="qrBox"></div>',
                 '<div id="qrBox">%s</div>' % LOGIN_STATE["qr_svg"])
         if LOGIN_STATE.get("qr_url"):
+            from html import escape as _esc
             html = html.replace(
                 '<div id="qrUrl" class="hint"></div>',
                 '<div id="qrUrl" class="hint">扫不了？长按复制这行链接，'
-                '粘到抖音 App 里打开试试：\n%s</div>' % LOGIN_STATE["qr_url"])
+                '粘到抖音 App 里打开试试：\n%s</div>' % _esc(LOGIN_STATE["qr_url"]))
         return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
     @app.get("/api/messages")
