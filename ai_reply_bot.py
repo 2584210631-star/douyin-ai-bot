@@ -390,8 +390,17 @@ def reply_to(uid, user_text):
             conv = DouyinAPI.create_conversation(AUTH, uid)
             _conv_cache[uid] = conv
         conversation_id, short_id, ticket = conv
-        ok = DouyinAPI.send_msg(AUTH, conversation_id, short_id, ticket, reply)
-        if ok:
+        # 长回复分段发（抖音单条私信限制）
+        MAX_LEN = 400
+        chunks = [reply[i:i+MAX_LEN] for i in range(0, len(reply), MAX_LEN)] or [reply]
+        all_ok = True
+        for chunk in chunks:
+            ok = DouyinAPI.send_msg(AUTH, conversation_id, short_id, ticket, chunk)
+            if not ok:
+                all_ok = False
+                break
+            time.sleep(0.5)  # 分段之间间隔
+        if all_ok:
             append_log({"dir": "out", "uid": uid, "type": "ai", "text": reply})
             # 记录对话历史
             h = _chat_history.setdefault(uid, [])
