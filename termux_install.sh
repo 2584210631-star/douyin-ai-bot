@@ -27,7 +27,11 @@ echo "==> [2/4] 安装预编译原生依赖 + 编译工具"
 pkg install -y python-cryptography protobuf cmake ninja clang 2>/dev/null || true
 
 echo "==> [3/4] 安装精简依赖（跳过 curl_cffi/opencv/av 等装不动的）"
-# 国内网络慢可加镜像：-i https://pypi.tuna.tsinghua.edu.cn/simple/
+# blackboxprotobuf 声明老版 protobuf 依赖，与 pb2 要求的 protobuf>=5.27 冲突，
+# 必须拆开装（同一命令会触发 pip 解析器无限回溯甚至去源码编译 cryptography）：
+pip install --break-system-packages --no-deps blackboxprotobuf
+pip install --break-system-packages --upgrade "protobuf>=5.27"
+# 国内 pip 慢可加镜像：-i https://pypi.tuna.tsinghua.edu.cn/simple/
 pip install --break-system-packages -r requirements-termux.txt || \
 pip install -r requirements-termux.txt
 

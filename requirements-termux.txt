@@ -1,8 +1,13 @@
 # Termux 精简依赖：只保留私信收发 + 登录所需，去掉 curl_cffi/opencv/av/openpyxl/aiofiles
 #
-# Termux 安装建议（pip 无 Android 预编译轮子的包）：
-#   pkg install -y python-cryptography protobuf cmake ninja clang
-#   pip install --break-system-packages -r requirements-termux.txt
+# Termux 安装顺序（重要）：
+#   blackboxprotobuf 声明了老版 protobuf 依赖，和 pb2 代码要求的 protobuf>=5.27
+#   冲突，不能放同一个 pip 命令里装（会触发解析器无限回溯）：
+#     pkg install -y python-cryptography protobuf cmake ninja clang
+#     pip install --break-system-packages --no-deps blackboxprotobuf
+#     pip install --break-system-packages --upgrade "protobuf>=5.27"
+#     pip install --break-system-packages -r requirements-termux.txt
+#   （protobuf 5.27+ 是纯 Python 轮子，无需编译；cryptography 用 pkg 预编译版）
 # 国内 pip 慢可加镜像：-i https://pypi.tuna.tsinghua.edu.cn/simple/
 requests
 beautifulsoup4
@@ -12,6 +17,4 @@ loguru
 python-dotenv
 qrcode
 websocket-client
-protobuf>=5.27
-blackboxprotobuf
 flask
