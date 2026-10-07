@@ -320,6 +320,14 @@ def extract_uid(sender):
     """从 protobuf sender 里取对方数字 uid，供 create_conversation 用。"""
     if sender is None:
         return None
+    # sender 本身就是 int64 数字（MessageBody.sender 字段类型=3 int64）
+    if isinstance(sender, int):
+        return sender
+    if isinstance(sender, str):
+        s = sender.strip()
+        if s.isdigit():
+            return int(s)
+        return None
     for name in ("id", "user_id", "uid"):
         v = getattr(sender, name, None)
         if v:
@@ -438,26 +446,27 @@ def start_receiver(auth):
                 if not notify:
                     return
                 content = json.loads(notify.content)
-                uid = extract_uid(notify.sender) or "?"
+                uid = extract_uid(notify.sender)
+                uid_display = uid or "?"
                 mtype = notify.message_type
                 if mtype == 7:                          # 文本
-                    append_log({"dir": "in", "uid": uid, "type": "私信",
+                    append_log({"dir": "in", "uid": uid_display, "type": "私信",
                                 "text": (content or {}).get("text", "") or "(空消息)"})
                     handle_text(notify, content, uid)
                 elif mtype == 5:                        # 表情包
-                    append_log({"dir": "in", "uid": uid, "type": "表情包",
+                    append_log({"dir": "in", "uid": uid_display, "type": "表情包",
                                 "text": _url_of(content, "url", "url_list")})
                 elif mtype == 27:                       # 图片
-                    append_log({"dir": "in", "uid": uid, "type": "图片",
+                    append_log({"dir": "in", "uid": uid_display, "type": "图片",
                                 "text": _url_of(content, "resource_url", "origin_url_list")})
                 elif mtype == 17:                       # 语音
-                    append_log({"dir": "in", "uid": uid, "type": "语音",
+                    append_log({"dir": "in", "uid": uid_display, "type": "语音",
                                 "text": _url_of(content, "resource_url", "url_list")})
                 elif mtype == 8:                        # 分享视频
-                    append_log({"dir": "in", "uid": uid, "type": "分享视频",
+                    append_log({"dir": "in", "uid": uid_display, "type": "分享视频",
                                 "text": str((content or {}).get("itemId", ""))})
                 else:
-                    append_log({"dir": "in", "uid": uid, "type": "消息",
+                    append_log({"dir": "in", "uid": uid_display, "type": "消息",
                                 "text": f"类型 {mtype}"})
             except Exception as exc:
                 logger.debug(f"消息解析跳过: {exc}")
