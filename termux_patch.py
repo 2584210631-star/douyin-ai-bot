@@ -43,7 +43,8 @@ DEFAULT_TIMEOUT = 30
 
 def _clean(kwargs):
     """去掉 curl_cffi 专属参数，requests 不认识它们。"""
-    for key in ("impersonate", "default_headers", "http_version"):
+    for key in ("impersonate", "default_headers", "http_version",
+                "split_cookie_header", "on_fresh_cookies"):
         kwargs.pop(key, None)
     return kwargs
 

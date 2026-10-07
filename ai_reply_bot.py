@@ -692,7 +692,14 @@ if __name__ == "__main__":
     if AUTH is None:
         logger.info("未检测到本地登录凭证，请在 Web 控制台扫码登录")
         append_log({"dir": "sys", "text": "等待网页扫码登录…"})
-        AUTH = web_qr_login()
+        # 登录失败不退出：Web 控制台保持在线，自动重试（每次都会刷新二维码）
+        while True:
+            try:
+                AUTH = web_qr_login()
+                break
+            except Exception as exc:
+                logger.error(f"网页扫码登录失败，5 秒后自动重试: {exc}")
+                time.sleep(5)
         try:
             from dy_apis.login_api import DYLoginApi
             DYLoginApi().save_credential(AUTH)
