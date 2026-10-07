@@ -44,6 +44,26 @@ import urllib.request
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 
+
+def _preflight():
+    """启动前检查第三方依赖，缺了给安装提示而不是一堆 traceback。"""
+    missing = []
+    for mod in ("dotenv", "flask", "requests", "qrcode", "loguru", "websocket",
+                "ecdsa", "cryptography", "blackboxprotobuf",
+                "google.protobuf", "bs4"):
+        try:
+            __import__(mod)
+        except ImportError:
+            missing.append(mod)
+    if missing:
+        print("缺少 Python 依赖: " + ", ".join(missing))
+        print("请先执行安装（Termux 建议先 pkg install python-cryptography protobuf cmake clang）:")
+        print("    pip install --break-system-packages -r requirements-termux.txt")
+        raise SystemExit(1)
+
+
+_preflight()
+
 from dotenv import load_dotenv
 load_dotenv()
 

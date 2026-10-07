@@ -1,4 +1,9 @@
 # Termux 精简依赖：只保留私信收发 + 登录所需，去掉 curl_cffi/opencv/av/openpyxl/aiofiles
+#
+# Termux 安装建议（pip 无 Android 预编译轮子的包）：
+#   pkg install -y python-cryptography protobuf cmake ninja clang
+#   pip install --break-system-packages -r requirements-termux.txt
+# 国内 pip 慢可加镜像：-i https://pypi.tuna.tsinghua.edu.cn/simple/
 requests
 beautifulsoup4
 cryptography
