@@ -853,7 +853,7 @@ def start_web_server(port):
         if AUTH is not None or LOGIN_RESULT.get("auth"):
             return jsonify({"ok": False, "msg": "已登录"})
         data = request.get_json(force=True, silent=True) or {}
-        cookie = str(data.get("cookie", "")).strip()
+        cookie = str(data.get("cookie", "")).strip().replace("\n", "").replace("\r", "").replace("\\n", "")
         if not cookie:
             return jsonify({"ok": False, "msg": "请粘贴 Cookie"})
         LOGIN_STATE.update(status="ck_logging", msg="正在用 Cookie 登录…")
