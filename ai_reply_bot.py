@@ -392,8 +392,11 @@ def reply_to(uid, user_text):
             _conv_cache.pop(uid, None)      # 发送失败：下次重建会话再试
             append_log({"dir": "sys", "text": f"[{uid}] 发送失败"})
     except Exception as exc:
+        import traceback
         _conv_cache.pop(uid, None)
+        tb = traceback.format_exc()
         append_log({"dir": "sys", "text": f"[{uid}] 回复异常: {exc}"})
+        logger.error(f"[{uid}] 回复异常完整堆栈:\n{tb}")
 
 
 def handle_text(notify, content, uid=None):
