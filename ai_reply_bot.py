@@ -222,15 +222,20 @@ def my_uid():
 
 
 # ---------------- AI 调用（标准库，不额外装包） ----------------
-def ask_ai(user_text):
-    """调 OpenAI 兼容 /chat/completions，返回回复文本；失败返回空串。"""
+_chat_history = {}  # uid -> [{"role":"user"/"assistant","content":...}, ...]
+_HISTORY_MAX = 20   # 每用户最多保留 20 条消息（10 轮对话）
+
+
+def ask_ai(uid, user_text):
+    """调 OpenAI 兼容 /chat/completions，带上该用户最近对话历史；失败返回空串。"""
     url = AI_BASE_URL + "/chat/completions"
+    history = _chat_history.get(uid, [])
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages.extend(history[-_HISTORY_MAX:])
+    messages.append({"role": "user", "content": user_text})
     payload = {
         "model": AI_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_text},
-        ],
+        "messages": messages,
         "temperature": 0.7,
     }
     req = urllib.request.Request(
@@ -363,7 +368,7 @@ def reply_to(uid, user_text):
         return
     _last_reply_at[uid] = now
 
-    reply = ask_ai(user_text)
+    reply = ask_ai(uid, user_text)
     if not reply:
         append_log({"dir": "sys", "text": f"[{uid}] AI 未产出回复，跳过"})
         if not AUTO_REPLY_ON_ERROR:
@@ -388,6 +393,12 @@ def reply_to(uid, user_text):
         ok = DouyinAPI.send_msg(AUTH, conversation_id, short_id, ticket, reply)
         if ok:
             append_log({"dir": "out", "uid": uid, "type": "ai", "text": reply})
+            # 记录对话历史
+            h = _chat_history.setdefault(uid, [])
+            h.append({"role": "user", "content": user_text})
+            h.append({"role": "assistant", "content": reply})
+            if len(h) > _HISTORY_MAX:
+                del h[:len(h) - _HISTORY_MAX]
         else:
             _conv_cache.pop(uid, None)      # 发送失败：下次重建会话再试
             append_log({"dir": "sys", "text": f"[{uid}] 发送失败"})
