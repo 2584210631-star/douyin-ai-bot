@@ -851,8 +851,21 @@ if __name__ == "__main__":
                 AUTH = web_qr_login()
                 break
             except Exception as exc:
-                logger.error(f"网页扫码登录失败，5 秒后自动重试: {exc}")
-                time.sleep(5)
+                msg = str(exc)
+                # error_code=2046 = 抖音要求先去 App 内完成账号安全验证。
+                # 狂刷二维码没用（扫了也会被拦），暂停久一点，提示用户先处理。
+                if "2046" in msg or "前往抖音APP完成验证" in msg:
+                    LOGIN_STATE.update(
+                        status="risk",
+                        msg="抖音风控：请先在抖音 App 内完成账号安全验证"
+                            "（退出重登/滑块/短信任一种），完成后本页会自动出新码")
+                    logger.error(
+                        f"抖音要求先完成账号安全验证（error_code=2046），"
+                        f"暂停 60 秒再出码: {exc}")
+                    time.sleep(60)
+                else:
+                    logger.error(f"网页扫码登录失败，10 秒后自动重试: {exc}")
+                    time.sleep(10)
         try:
             from dy_apis.login_api import DYLoginApi
             DYLoginApi().save_credential(AUTH)
