@@ -538,6 +538,7 @@ textarea{min-height:70px;resize:vertical}
   <div class="ltabs">
     <button id="ltabQr" class="active" onclick="switchLogin('qr')">扫码登录</button>
     <button id="ltabSms" onclick="switchLogin('sms')">验证码登录</button>
+    <button id="ltabCk" onclick="switchLogin('ck')">粘贴Cookie</button>
   </div>
     <div id="qrPane">
     <h2>扫码登录抖音</h2>
@@ -555,6 +556,13 @@ textarea{min-height:70px;resize:vertical}
     <input id="smsCode" placeholder="输入收到的验证码" inputmode="numeric">
     <div class="row"><button onclick="submitSms()">登录</button></div>
     <div id="smsMsg" class="hint"></div>
+  </div>
+  <div id="ckPane" style="display:none">
+    <h2>粘贴 Cookie 登录</h2>
+    <p class="hint">用电脑浏览器登录 douyin.com（真实浏览器能过 2046），按 F12 打开开发者工具 → Network 任意请求 → 复制 Cookie 请求头，粘到下面（格式 k=v; k2=v2）。</p>
+    <textarea id="ckInput" rows="6" placeholder="粘贴 cookie 字符串"></textarea>
+    <div class="row"><button onclick="submitCk()">用 Cookie 登录</button></div>
+    <div id="ckMsg" class="hint"></div>
   </div>
 </div>
 
@@ -672,8 +680,18 @@ async function saveConfig(){
 function switchLogin(t){
   document.getElementById('ltabQr').classList.toggle('active',t==='qr');
   document.getElementById('ltabSms').classList.toggle('active',t==='sms');
+  document.getElementById('ltabCk').classList.toggle('active',t==='ck');
   document.getElementById('qrPane').style.display=t==='qr'?'block':'none';
   document.getElementById('smsPane').style.display=t==='sms'?'block':'none';
+  document.getElementById('ckPane').style.display=t==='ck'?'block':'none';
+}
+async function submitCk(){
+  const ck=document.getElementById('ckInput').value.trim();
+  const out=document.getElementById('ckMsg');
+  if(!ck){out.textContent='请先粘贴 Cookie';return;}
+  const r=await fetch('/api/login/cookie',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:ck})});
+  const res=await r.json();
+  out.textContent=res.msg||'';
 }
 async function sendSms(){
   const phone=document.getElementById('smsPhone').value.trim();
@@ -827,6 +845,42 @@ def start_web_server(port):
         LOGIN_STATE.update(status="sms_submitting", msg="正在登录…")
         threading.Thread(target=_sms_worker, args=(phone, code),
                          daemon=True).start()
+        return jsonify({"ok": True, "msg": "正在登录…"})
+
+    @app.post("/api/login/cookie")
+    def api_login_cookie():
+        """粘贴已有登录 Cookie（真实浏览器会话，可绕过扫码 2046 风控）。"""
+        if AUTH is not None or LOGIN_RESULT.get("auth"):
+            return jsonify({"ok": False, "msg": "已登录"})
+        data = request.get_json(force=True, silent=True) or {}
+        cookie = str(data.get("cookie", "")).strip()
+        if not cookie:
+            return jsonify({"ok": False, "msg": "请粘贴 Cookie"})
+        LOGIN_STATE.update(status="ck_logging", msg="正在用 Cookie 登录…")
+
+        def worker():
+            try:
+                from builder.auth import DouyinAuth
+                auth = DouyinAuth.open(
+                    cookie_str=cookie, login_type="cookie",
+                    bootstrap_creator=False)
+                if not (auth.cookie or {}).get("sessionid"):
+                    raise RuntimeError(
+                        "Cookie 里没有 sessionid（未真正登录成功或复制的不是"
+                        "登录态 Cookie），请重新登录 douyin.com 后复制")
+                from dy_apis.login_api import DYLoginApi
+                DYLoginApi().save_credential(auth)
+                LOGIN_RESULT["auth"] = auth
+                LOGIN_STATE.update(status="confirmed",
+                                   msg="Cookie 登录成功！正在进入…")
+                append_log({"dir": "sys", "text": "Cookie 登录成功，凭证已保存"})
+                LOGIN_EVENT.set()
+            except Exception as exc:
+                LOGIN_STATE.update(status="ck_error",
+                                   msg=f"Cookie 登录失败: {exc}")
+                logger.error(f"Cookie 登录失败: {exc}")
+
+        threading.Thread(target=worker, daemon=True).start()
         return jsonify({"ok": True, "msg": "正在登录…"})
 
     threading.Thread(
