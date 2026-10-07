@@ -2126,9 +2126,17 @@ class DouyinAPI:
             verify=False
         )
         responseProto = ResponseProto.Response()
-        responseProto.ParseFromString(resp.content)
+        try:
+            responseProto.ParseFromString(resp.content)
+        except Exception:
+            raise RuntimeError(f"create_conversation 返回非protobuf (status={resp.status_code}, len={len(resp.content)})")
         resp_json = protobuf_to_dict(responseProto)
-        conversation = resp_json['body']['create_conversation_v2_body']['conversation_info_list'][0]
+        body = resp_json.get('body', {})
+        conv_body = body.get('create_conversation_v2_body') or body.get('get_conversation_info_list_v2_response_body', {})
+        conv_list = conv_body.get('conversation_info_list', [])
+        if not conv_list:
+            raise RuntimeError(f"create_conversation 无会话列表: {str(resp_json)[:200]}")
+        conversation = conv_list[0]
         conversation_id = conversation['conversation_id']
         conversation_short_id, ticket = int(conversation['conversation_short_id']), conversation['ticket']
         return conversation_id, conversation_short_id, ticket
@@ -2297,7 +2305,11 @@ class DouyinAPI:
         resp = requests.post(url, params=params, headers=headers.get(), verify=False, cookies=auth.cookie,
                              data=requestProto.SerializeToString())
         responseProto = ResponseProto.Response()
-        responseProto.ParseFromString(resp.content)
+        try:
+            responseProto.ParseFromString(resp.content)
+        except Exception as e:
+            logger.error(f'私信发送响应解析失败 status={resp.status_code} len={len(resp.content)}: {e}')
+            return False
         resp_json = protobuf_to_dict(responseProto)
         success = resp_json.get('message') == 'OK'
         if success:
