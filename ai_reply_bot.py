@@ -616,7 +616,7 @@ async function refresh(){
       if(st.qr_svg){document.getElementById('qrBox').innerHTML=st.qr_svg;}
       document.getElementById('loginMsg').textContent=st.msg||'请扫码';
       document.getElementById('qrUrl').textContent=(st.qr_url||'')?
-        '扫不了？长按复制这行链接，粘到抖音 App 里打开试试：\n'+st.qr_url:'';
+        '扫不了？长按复制这行链接，粘到抖音 App 里打开试试：\\n'+st.qr_url:'';
       document.getElementById('smsMsg').textContent=st.msg||'';
       if(st.status==='idle'){fetch('/api/login/start',{method:'POST'});}
       return;
