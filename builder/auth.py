@@ -387,7 +387,12 @@ class DouyinAuth:
             # The jingxuan SMS flow is the strict, browser-evidence path.
             # Do not allow bootstrap to continue with synthetic challenge
             # cookies or missing device headers.
-            auth = api.bootstrap_auth(strict=True, proxies=proxies)
+            # DY_SMS_RELAXED=1（配合 DY_ALLOW_SYNTHETIC_ANONYMOUS_COOKIES=1）
+            # 可跳过"匿名 Cookie 必须来自真实浏览器"的严格校验，在无浏览器
+            # 抓包环境（如 Termux）继续尝试短信登录；风控概率更高。
+            relaxed = os.getenv("DY_SMS_RELAXED", "").lower() in {
+                "1", "true", "yes", "on"}
+            auth = api.bootstrap_auth(strict=not relaxed, proxies=proxies)
         response = api.send_sms_code(auth, phone)
         return auth, response
 

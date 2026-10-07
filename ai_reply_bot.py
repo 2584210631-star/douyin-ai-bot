@@ -169,6 +169,7 @@ def start_web_qr_login():
         if LOGIN_STATE.get("sms_sent"):
             return  # 用户已改用验证码登录，别覆盖它的状态
         LOGIN_STATE["qr_svg"] = _qr_to_svg(url)
+        LOGIN_STATE["qr_url"] = url
         LOGIN_STATE["status"] = "new_qr"
         LOGIN_STATE["msg"] = "请用抖音 App 扫一扫（可截图后用抖音扫一扫识别）"
 
@@ -189,7 +190,8 @@ def start_web_qr_login():
         finally:
             LOGIN_EVENT.set()
 
-    LOGIN_STATE.update(status="waiting", msg="正在获取二维码…", qr_svg="")
+    LOGIN_STATE.update(status="waiting", msg="正在获取二维码…", qr_svg="",
+                       qr_url="")
     threading.Thread(target=worker, daemon=True).start()
 
 
@@ -537,10 +539,11 @@ textarea{min-height:70px;resize:vertical}
     <button id="ltabQr" class="active" onclick="switchLogin('qr')">扫码登录</button>
     <button id="ltabSms" onclick="switchLogin('sms')">验证码登录</button>
   </div>
-  <div id="qrPane">
+    <div id="qrPane">
     <h2>扫码登录抖音</h2>
     <p class="hint">用抖音 App「扫一扫」扫描下方二维码，在手机上确认登录。</p>
     <div id="qrBox"></div>
+    <div id="qrUrl" class="hint"></div>
     <div id="loginMsg" class="hint">正在获取二维码…</div>
   </div>
   <div id="smsPane" style="display:none">
@@ -612,6 +615,8 @@ async function refresh(){
       const st=await (await fetch('/api/login/status')).json();
       if(st.qr_svg){document.getElementById('qrBox').innerHTML=st.qr_svg;}
       document.getElementById('loginMsg').textContent=st.msg||'请扫码';
+      document.getElementById('qrUrl').textContent=(st.qr_url||'')?
+        '扫不了？长按复制这行链接，粘到抖音 App 里打开试试：\n'+st.qr_url:'';
       document.getElementById('smsMsg').textContent=st.msg||'';
       if(st.status==='idle'){fetch('/api/login/start',{method:'POST'});}
       return;
