@@ -36,6 +36,13 @@ class Header:
         :param origin: 换证书的站点，需与业务请求同源。
         """
         from utils.bd_ticket import ticket_guard_version
+        if not auth.ts_sign:
+            # cookie 登录无 ticket guard bootstrap，降级：只加基本头，不加 client-data
+            self.set_header('bd-ticket-guard-ree-public-key', generate_ree_key(auth.private_key))
+            self.set_header('bd-ticket-guard-version', '2')
+            self.set_header('bd-ticket-guard-web-version', '2')
+            self.set_header('bd-ticket-guard-web-sign-type', '0')
+            return self
         if not auth.ticket_matches_session():
             raise RuntimeError(
                 'bd-ticket-guard 的 ticket/ts_sign 与当前 cookie 不是同一次登录'
