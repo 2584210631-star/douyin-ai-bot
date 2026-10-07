@@ -40,6 +40,12 @@ from utils.passport import (CLIENT_DATA_COOKIE, CLIENT_WEB_DOMAIN_COOKIE,
                            build_client_data_v2_cookie, merge_set_cookies,
                            generate_ec_keypair, passport_encrypt)
 
+# DY_SMS_SKIP_DTRAIT=1：短信验证码链路不再强制要求 x-tt-session-dtrait
+# （无浏览器抓包素材的环境如 Termux 可用；服务端是否接受由抖音风控决定，
+# 不接受会返回 2046/验证码，届时需提供真实浏览器素材 DY_DTRAIT_BLOB）。
+_DY_SMS_SKIP_DTRAIT = os.getenv(
+    "DY_SMS_SKIP_DTRAIT", "").lower() in {"1", "true", "yes", "on"}
+
 CLIENT_DATA_V2_COOKIE = "bd_ticket_guard_client_data_v2"
 
 # ---- Cookie 的域作用域 ----
@@ -3255,7 +3261,7 @@ class DYLoginApi:
             headers=headers_with_cookie(
                 self._passport_headers(
                     auth, form=True, api="/passport/web/send_code/",
-                    strict_dtrait=True, body_length=len(body.encode()),
+                    strict_dtrait=not _DY_SMS_SKIP_DTRAIT, body_length=len(body.encode()),
                     wire_accept_encoding=True).get(),
                 scoped_cookies(auth, "sms")),
             params=params.get(),
@@ -3323,7 +3329,7 @@ class DYLoginApi:
             headers=headers_with_cookie(
                 self._passport_headers(
                     auth, form=True, api="/passport/web/sms_login/",
-                    strict_dtrait=True, body_length=len(body.encode()),
+                    strict_dtrait=not _DY_SMS_SKIP_DTRAIT, body_length=len(body.encode()),
                     wire_accept_encoding=True).get(),
                 scoped_cookies(auth, "sms_login")),
             params=params.get(),
