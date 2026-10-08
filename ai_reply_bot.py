@@ -377,6 +377,11 @@ def reply_to(uid, user_text):
     reply = ask_ai(uid, user_text)
     if not reply:
         append_log({"dir": "sys", "text": f"[{uid}] AI 未产出回复，跳过"})
+        # AI 失败也记用户消息，保持上下文
+        h = _chat_history.setdefault(uid, [])
+        h.append({"role": "user", "content": user_text})
+        if len(h) > _HISTORY_MAX:
+            del h[:len(h) - _HISTORY_MAX]
         if not AUTO_REPLY_ON_ERROR:
             return
         reply = "稍等，我本人看到了会回复你～"
@@ -408,7 +413,7 @@ def reply_to(uid, user_text):
             time.sleep(3)
         if all_ok:
             append_log({"dir": "out", "uid": uid, "type": "ai", "text": reply})
-            # 记录对话历史
+            # 记录对话历史（用户消息+AI回复）
             h = _chat_history.setdefault(uid, [])
             h.append({"role": "user", "content": user_text})
             h.append({"role": "assistant", "content": reply})
@@ -417,6 +422,11 @@ def reply_to(uid, user_text):
         else:
             _conv_cache.pop(uid, None)      # 发送失败：下次重建会话再试
             append_log({"dir": "sys", "text": f"[{uid}] 发送失败"})
+            # 发送失败也记用户消息，保持上下文
+            h = _chat_history.setdefault(uid, [])
+            h.append({"role": "user", "content": user_text})
+            if len(h) > _HISTORY_MAX:
+                del h[:len(h) - _HISTORY_MAX]
     except Exception as exc:
         import traceback
         _conv_cache.pop(uid, None)
