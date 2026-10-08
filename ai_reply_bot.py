@@ -104,6 +104,8 @@ AUTH = None                 # 登录态，main 里赋值
 LOG = deque(maxlen=500)         # 消息/事件流水（Web 面板展示用）
 LOG_TOTAL = 0
 _seen_messages = set()          # (conversation_id, index) 去重
+_seen_order = []                # FIFO 队列，满了删最旧的
+_sms_last_sent = {}             # 手机号 -> 上次发送时间戳（频控）
 _conv_cache = {}                # 对方uid -> (conversation_id, short_id, ticket)
 _last_reply_at = {}             # 对方uid -> 上次回复时间戳
 _global_lock = threading.Lock()
@@ -443,8 +445,10 @@ def handle_text(notify, content, uid=None):
     if key in _seen_messages:
         return
     _seen_messages.add(key)
-    if len(_seen_messages) > 20000:                     # 防止无界增长
-        _seen_messages.clear()
+    _seen_order.append(key)
+    if len(_seen_order) > 20000:                     # FIFO 淘汰最旧的
+        old = _seen_order.pop(0)
+        _seen_messages.discard(old)
     _ai_pool.submit(reply_to, uid, text)
 
 
@@ -764,6 +768,40 @@ def start_web_server(port):
         return None
 
     app = Flask(__name__)
+    WEB_PASSWORD = os.getenv("WEB_PASSWORD", "")
+
+    @app.before_request
+    def _check_auth():
+        if not WEB_PASSWORD:
+            return None  # 没设密码 = 本地用不锁
+        from flask import request, make_response
+        if request.path == "/api/login/password":
+            return None
+        token = request.cookies.get("bot_auth", "")
+        if token == WEB_PASSWORD:
+            return None
+        # 未登录：API 返回 401，页面显示登录框
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "unauthorized"}), 401
+        login_html = (
+            '<html><body style="font-family:sans-serif;background:#111;color:#fff;'
+            'display:flex;align-items:center;justify-content:center;height:100vh;">'
+            '<form method="post" action="/api/login/password" style="text-align:center;">'
+            '<h3>控制台密码</h3>'
+            '<input name="pwd" type="password" autofocus style="padding:8px;margin:8px;width:200px;">'
+            '<br><button style="padding:8px 20px;">登录</button></form></body></html>'
+        )
+        return login_html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+    @app.post("/api/login/password")
+    def _login_password():
+        from flask import request, make_response
+        pwd = request.form.get("pwd", "")
+        if pwd == WEB_PASSWORD:
+            resp = make_response(jsonify({"ok": True}))
+            resp.set_cookie("bot_auth", WEB_PASSWORD, max_age=86400*30)
+            return resp
+        return jsonify({"ok": False}), 401
 
     @app.get("/")
     def index():
@@ -862,6 +900,13 @@ def start_web_server(port):
         phone = str(data.get("phone", "")).strip()
         if not phone:
             return jsonify({"ok": False, "msg": "请输入手机号"})
+        # 频控：同号 60 秒内只能发一次
+        now = time.time()
+        last = _sms_last_sent.get(phone, 0)
+        if now - last < 60:
+            wait = int(60 - (now - last))
+            return jsonify({"ok": False, "msg": f"发送太频繁，请 {wait} 秒后再试"})
+        _sms_last_sent[phone] = now
         if LOGIN_STATE["status"] == "sms_sent":
             return jsonify({"ok": True, "msg": "验证码已发送，请查收"})
         LOGIN_STATE.update(status="sms_sending", msg="正在发送验证码…")
